@@ -9,6 +9,7 @@
     "./**/*.tsx"
   ],
   "compilerOptions": {
+    "types": ["chrome", "node"],
     "paths": {
       "~*": [
         "./*"

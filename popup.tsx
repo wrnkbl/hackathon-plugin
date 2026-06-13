@@ -7,8 +7,8 @@ export const config = {
   }
 }
 
+// Mamy już tylko jeden endpoint!
 const API_VERIFY_URL = "https://safey.s1.hcmp.pl/api/Verify"
-const API_ANALYZE_URL = "https://safey.s1.hcmp.pl/api/Verify/analizaURL"
 
 function IndexPopup() {
   const [isEnabled, setIsEnabled] = useState(true)
@@ -16,11 +16,15 @@ function IndexPopup() {
   const [isDangerousSite, setIsDangerousSite] = useState(false) 
   const [currentDomain, setCurrentDomain] = useState("")
   const [platformName, setPlatformName] = useState<string | null>(null)
+  
+  // 🟩 NOWY STAN: Przechowujemy punkty za URL pobrane przy starcie popupa
+  const [urlScore, setUrlScore] = useState<number>(0)
 
   const [popupAnalysisStatus, setPopupAnalysisStatus] = useState<"nieUruchomiono" | "loading" | "done">("nieUruchomiono")
   const [popupAnalysisReasons, setPopupAnalysisReasons] = useState<string[]>([])
   const [popupAnalysisScore, setPopupAnalysisScore] = useState<number>(0)
 
+  // --- INICJALIZACJA (Pobieranie statusu z bazy i punktów za URL) ---
   useEffect(() => {
     if (typeof chrome !== "undefined" && chrome.storage) {
       chrome.storage.local.get(["safeyEnabled"], (result) => {
@@ -41,7 +45,7 @@ function IndexPopup() {
             fetch(API_VERIFY_URL, {
               method: "POST",
               headers: {
-                "accept": "text/plain",
+                "accept": "application/json", // Zmiana na application/json
                 "Content-Type": "application/json"
               },
               body: JSON.stringify({ url: fullUrl })
@@ -49,6 +53,9 @@ function IndexPopup() {
               .then((response) => response.json())
               .then((data) => {
                 if (data) {
+                  // Zapisujemy liczbę punktów z nowego schematu backendu
+                  setUrlScore(data.punkty || 0)
+
                   if (data.czyJestOszustwem === true) {
                     setIsDangerousSite(true)
                     setIsVerifiedBank(false)
@@ -63,7 +70,7 @@ function IndexPopup() {
                 }
               })
               .catch((error) => {
-                console.error("[Safey Popup] Błąd połączenia z API:", error)
+                console.error("[Safey Popup] Błąd połączenia z API Verify:", error)
                 setIsVerifiedBank(false)
                 setIsDangerousSite(false)
               })
@@ -77,6 +84,7 @@ function IndexPopup() {
     }
   }, [])
 
+  // --- ANALIZA NA ŻĄDANIE (Tylko zawartość HTML) ---
   const handlePopupAnalyze = () => {
     if (typeof chrome === "undefined" || !chrome.tabs) return
 
@@ -86,61 +94,49 @@ function IndexPopup() {
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const activeTab = tabs[0]
-    
       const tabId = activeTab?.id
-      const tabUrl = activeTab?.url
 
-      if (!tabId || !tabUrl) {
+      if (!tabId) {
         setPopupAnalysisStatus("nieUruchomiono")
         return
       }
 
+      // Odtwarzamy powody punktacji z URL (jeśli backend je wcześniej naliczył)
+      const reasonsFromUrl: string[] = []
+      if (urlScore >= 60) reasonsFromUrl.push("Wykryto podejrzaną literówkę w adresie strony.")
+      if (urlScore === 25 || urlScore === 85) reasonsFromUrl.push("Struktura językowa adresu URL przypomina losowy generator (wysoka entropia).")
 
-      fetch(API_ANALYZE_URL, {
-        method: "POST",
+      // Strzał BEZPOŚREDNIO do zawartości strony
+      chrome.tabs.sendMessage(tabId, { action: "getHtmlAnalysis" }, (htmlReport: any) => {
+        setPopupAnalysisStatus("done")
         
-        body: JSON.stringify({ url: tabUrl })
-      })
-        .then((response) => response.json())
-        .then((urlScore: number) => {
+        if (chrome.runtime.lastError || !htmlReport) {
+          // Fallback, gdy brak dostępu do HTML
+          setPopupAnalysisScore(urlScore)
           if (urlScore > 0) {
-            const reasonsFromUrl: string[] = []
-            if (urlScore >= 60) reasonsFromUrl.push("Wykryto podejrzaną literówkę w adresie strony (Typosquatting).")
-            if (urlScore === 25 || urlScore === 85) reasonsFromUrl.push("Struktura językowa adresu URL przypomina losowy generator (Wysoka entropia).")
-
-       
-            chrome.tabs.sendMessage(tabId, { action: "getHtmlAnalysis" }, (htmlReport: any) => {
-              setPopupAnalysisStatus("done")
-           
-              if (chrome.runtime.lastError || !htmlReport) {
-                console.warn("warn")
-                setPopupAnalysisScore(urlScore)
-                setPopupAnalysisReasons([
-                  "Wykryto anomalie na stronie!",
-                  ...reasonsFromUrl,
-                  "uwaga analiza niedost"
-                ])
-                return
-              }
-
-        
-              const totalScore = urlScore + htmlReport.score
-              const finalReasons = ["Wykryto anomalie na stronie", ...reasonsFromUrl, ...htmlReport.reasons]
-
-              setPopupAnalysisScore(totalScore)
-              setPopupAnalysisReasons(finalReasons)
-            })
+            setPopupAnalysisReasons([
+              "Wykryto anomalie w adresie!",
+              ...reasonsFromUrl,
+              "Pełna analiza HTML niedostępna na plikach lokalnych."
+            ])
           } else {
-            setPopupAnalysisStatus("done")
-            setPopupAnalysisScore(0)
-            setPopupAnalysisReasons(["Analiza adresu oraz kodu nie wykryła anomalii."])
+            setPopupAnalysisReasons(["Analiza HTML niedostępna. Brak wykrytych zagrożeń."])
           }
-        })
-        .catch((error) => {
-          console.error("[Safey] Krytyczny błąd fetch dla analizaURL:", error)
-          setPopupAnalysisStatus("nieUruchomiono")
-          setPopupAnalysisReasons(["Błąd połączenia z serwerem analizy heurystycznej."])
-        })
+          return
+        }
+
+        // Mamy HTML! Sumujemy punkty URL i HTML
+        const totalScore = urlScore + htmlReport.score
+        
+        if (totalScore > 0) {
+          const finalReasons = ["Wykryto anomalie na stronie!", ...reasonsFromUrl, ...htmlReport.reasons]
+          setPopupAnalysisScore(totalScore)
+          setPopupAnalysisReasons(finalReasons)
+        } else {
+          setPopupAnalysisScore(0)
+          setPopupAnalysisReasons(["Analiza adresu oraz kodu nie wykryła anomalii."])
+        }
+      })
     })
   }
 
@@ -171,6 +167,7 @@ function IndexPopup() {
       backgroundColor: "#FFFFFF", color: "#0F172A"
     }}>
       
+      {/* HEADER */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
         <img 
           src={require("url:./assets/icon.png")} 
@@ -185,6 +182,7 @@ function IndexPopup() {
         </span>
       </div>
 
+      {/* PRZEŁĄCZNIK */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", paddingBottom: "12px" }}>
         <span style={{ fontSize: "13px", fontWeight: "600", color: "#475569" }}>
           Status ochrony: <span style={{ color: isEnabled ? "#10B981" : "#64748B" }}>{isEnabled ? "ON" : "OFF"}</span>
@@ -200,6 +198,7 @@ function IndexPopup() {
         </button>
       </div>
 
+      {/* SEKCJA STATUSU */}
       {shouldShowStatusSection && (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px", padding: "10px 0", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: getDotColor(), boxShadow: isEnabled && (isVerifiedBank || isDangerousSite) ? `0 0 8px ${getDotColor()}` : "none", transition: "0.2s" }} />
@@ -209,28 +208,36 @@ function IndexPopup() {
                 Strona zweryfikowana w bazie Safey: <strong>{platformName}</strong>
               </>
             )}
-            {isDangerousSite && "Strona w bazie zagrożeń"}
+            {isDangerousSite && "Strona w bazie zagrożeń!"}
           </span>
         </div>
       )}
 
+      {/* PRZYCISK ANALIZY */}
+      {/* 🟩 DODANO: Jeśli strona jest niebezpieczna (isDangerousSite), przycisk jest wyłączony! */}
       <button 
-        disabled={!isEnabled || popupAnalysisStatus === "loading"}
+        disabled={!isEnabled || popupAnalysisStatus === "loading" || isDangerousSite}
         onClick={handlePopupAnalyze}
         style={{
+          display: isDangerousSite ? "none" : "block",
           width: "100%", 
           backgroundColor: popupAnalysisStatus === "done" ? "#10B981" : (isEnabled ? "#5A5ADE" : "#E2E8F0"),
-          color: isEnabled ? "white" : "#94A3B8", border: "none", padding: "10px",
+          color: (isEnabled || isDangerousSite) ? "white" : "#94A3B8", border: "none", padding: "10px",
           borderRadius: "6px", fontSize: "13px", fontWeight: "600",
-          cursor: isEnabled && popupAnalysisStatus !== "loading" ? "pointer" : "not-allowed",
+          cursor: (isEnabled && popupAnalysisStatus !== "loading" && !isDangerousSite) ? "pointer" : "not-allowed",
           marginTop: shouldShowStatusSection ? "0px" : "10px", transition: "all 0.3s"
         }}>
-        {popupAnalysisStatus === "nieUruchomiono" && "Wyślij stronę do analizy"}
-        {popupAnalysisStatus === "loading" && "Analizowanie kodu HTML..."}
-        {popupAnalysisStatus === "done" && "Wyślij stronę do analizy"}
+        {isDangerousSite ? "Analiza zablokowana (zagrożenie)" : (
+          <>
+            {popupAnalysisStatus === "nieUruchomiono" && "Wyślij stronę do analizy"}
+            {popupAnalysisStatus === "loading" && "Analizowanie zawartości HTML..."}
+            {popupAnalysisStatus === "done" && "Wyślij stronę do analizy"}
+          </>
+        )}
       </button>
 
-      {popupAnalysisReasons.length > 0 && (
+      {/* RAPORT BŁĘDÓW */}
+      {popupAnalysisReasons.length > 0 && !isDangerousSite && (
         <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "12px", borderRadius: "6px", fontSize: "12px", lineHeight: "1.4", marginTop: "12px", color: "#334155" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
             <strong style={{ color: "#0F172A" }}>Raport:</strong>

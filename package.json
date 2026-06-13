@@ -24,8 +24,14 @@
     "typescript": "5.3.3"
   },
   "manifest": {
+    "permissions": [
+      "scripting",
+      "activeTab",
+      "storage"
+    ],
     "host_permissions": [
-      "https://*/*"
+      "https://*/*",
+      "file:///*" 
     ]
   }
 }

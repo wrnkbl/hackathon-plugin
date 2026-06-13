@@ -7,7 +7,6 @@ export const config = {
   }
 }
 
-// Mamy już tylko jeden endpoint!
 const API_VERIFY_URL = "https://safey.s1.hcmp.pl/api/Verify"
 
 function IndexPopup() {
@@ -17,14 +16,12 @@ function IndexPopup() {
   const [currentDomain, setCurrentDomain] = useState("")
   const [platformName, setPlatformName] = useState<string | null>(null)
   
-  // 🟩 NOWY STAN: Przechowujemy punkty za URL pobrane przy starcie popupa
   const [urlScore, setUrlScore] = useState<number>(0)
 
   const [popupAnalysisStatus, setPopupAnalysisStatus] = useState<"nieUruchomiono" | "loading" | "done">("nieUruchomiono")
   const [popupAnalysisReasons, setPopupAnalysisReasons] = useState<string[]>([])
   const [popupAnalysisScore, setPopupAnalysisScore] = useState<number>(0)
 
-  // --- INICJALIZACJA (Pobieranie statusu z bazy i punktów za URL) ---
   useEffect(() => {
     if (typeof chrome !== "undefined" && chrome.storage) {
       chrome.storage.local.get(["safeyEnabled"], (result) => {
@@ -45,7 +42,7 @@ function IndexPopup() {
             fetch(API_VERIFY_URL, {
               method: "POST",
               headers: {
-                "accept": "application/json", // Zmiana na application/json
+                "accept": "application/json",
                 "Content-Type": "application/json"
               },
               body: JSON.stringify({ url: fullUrl })
@@ -53,7 +50,6 @@ function IndexPopup() {
               .then((response) => response.json())
               .then((data) => {
                 if (data) {
-                  // Zapisujemy liczbę punktów z nowego schematu backendu
                   setUrlScore(data.punkty || 0)
 
                   if (data.czyJestOszustwem === true) {
@@ -84,7 +80,6 @@ function IndexPopup() {
     }
   }, [])
 
-  // --- ANALIZA NA ŻĄDANIE (Tylko zawartość HTML) ---
   const handlePopupAnalyze = () => {
     if (typeof chrome === "undefined" || !chrome.tabs) return
 
@@ -101,40 +96,24 @@ function IndexPopup() {
         return
       }
 
-      // Odtwarzamy powody punktacji z URL (jeśli backend je wcześniej naliczył)
-      const reasonsFromUrl: string[] = []
-      if (urlScore >= 60) reasonsFromUrl.push("Wykryto podejrzaną literówkę w adresie strony.")
-      if (urlScore === 25 || urlScore === 85) reasonsFromUrl.push("Struktura językowa adresu URL przypomina losowy generator (wysoka entropia).")
-
-      // Strzał BEZPOŚREDNIO do zawartości strony
+      // Strzał BEZPOŚREDNIO do zawartości strony, raportujemy tylko HTML
       chrome.tabs.sendMessage(tabId, { action: "getHtmlAnalysis" }, (htmlReport: any) => {
         setPopupAnalysisStatus("done")
         
         if (chrome.runtime.lastError || !htmlReport) {
-          // Fallback, gdy brak dostępu do HTML
-          setPopupAnalysisScore(urlScore)
-          if (urlScore > 0) {
-            setPopupAnalysisReasons([
-              "Wykryto anomalie w adresie!",
-              ...reasonsFromUrl,
-              "Pełna analiza HTML niedostępna na plikach lokalnych."
-            ])
-          } else {
-            setPopupAnalysisReasons(["Analiza HTML niedostępna. Brak wykrytych zagrożeń."])
-          }
+          setPopupAnalysisScore(0)
+          setPopupAnalysisReasons(["Analiza HTML niedostępna na tej karcie (np. zablokowany plik lokalny)."])
           return
         }
 
-        // Mamy HTML! Sumujemy punkty URL i HTML
-        const totalScore = urlScore + htmlReport.score
-        
-        if (totalScore > 0) {
-          const finalReasons = ["Wykryto anomalie na stronie!", ...reasonsFromUrl, ...htmlReport.reasons]
-          setPopupAnalysisScore(totalScore)
+        // Bierzemy punkty i powody wyłącznie z analiza.ts
+        if (htmlReport.score > 0) {
+          const finalReasons = ["Wykryto anomalie w kodzie strony!", ...htmlReport.reasons]
+          setPopupAnalysisScore(htmlReport.score)
           setPopupAnalysisReasons(finalReasons)
         } else {
           setPopupAnalysisScore(0)
-          setPopupAnalysisReasons(["Analiza adresu oraz kodu nie wykryła anomalii."])
+          setPopupAnalysisReasons(["Analiza zawartości strony nie wykryła anomalii."])
         }
       })
     })
@@ -167,7 +146,6 @@ function IndexPopup() {
       backgroundColor: "#FFFFFF", color: "#0F172A"
     }}>
       
-      {/* HEADER */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
         <img 
           src={require("url:./assets/icon.png")} 
@@ -182,7 +160,6 @@ function IndexPopup() {
         </span>
       </div>
 
-      {/* PRZEŁĄCZNIK */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", paddingBottom: "12px" }}>
         <span style={{ fontSize: "13px", fontWeight: "600", color: "#475569" }}>
           Status ochrony: <span style={{ color: isEnabled ? "#10B981" : "#64748B" }}>{isEnabled ? "ON" : "OFF"}</span>
@@ -198,7 +175,6 @@ function IndexPopup() {
         </button>
       </div>
 
-      {/* SEKCJA STATUSU */}
       {shouldShowStatusSection && (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px", padding: "10px 0", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: getDotColor(), boxShadow: isEnabled && (isVerifiedBank || isDangerousSite) ? `0 0 8px ${getDotColor()}` : "none", transition: "0.2s" }} />
@@ -213,8 +189,6 @@ function IndexPopup() {
         </div>
       )}
 
-      {/* PRZYCISK ANALIZY */}
-      {/* 🟩 DODANO: Jeśli strona jest niebezpieczna (isDangerousSite), przycisk jest wyłączony! */}
       <button 
         disabled={!isEnabled || popupAnalysisStatus === "loading" || isDangerousSite}
         onClick={handlePopupAnalyze}
@@ -236,7 +210,6 @@ function IndexPopup() {
         )}
       </button>
 
-      {/* RAPORT BŁĘDÓW */}
       {popupAnalysisReasons.length > 0 && !isDangerousSite && (
         <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "12px", borderRadius: "6px", fontSize: "12px", lineHeight: "1.4", marginTop: "12px", color: "#334155" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>

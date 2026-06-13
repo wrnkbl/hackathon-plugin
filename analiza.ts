@@ -32,6 +32,8 @@ export function analyzeHTML(): AnalysisReport {
     "dopłać", 
     "szybka wpłata", 
     "weryfikacja", 
+    "kup teraz",
+
     "paczka zatrzymana"
   ];
 
@@ -45,7 +47,7 @@ export function analyzeHTML(): AnalysisReport {
   if (foundWordsCount > 0) {
     score += foundWordsCount * 15;
     const foundWords = riskyWords.filter((word) => pageText.includes(word));
-    reasons.push(`Słowa kluczowe: ${foundWords.join(", ")}.`);
+    reasons.push(`Słowa kluczowe: ${foundWords.join(", ")} - na niepotwierdzonej platformie.`);
   }
 
   // 3. Analiza anomalii obrazków (skopiowany layout)
@@ -66,7 +68,7 @@ export function analyzeHTML(): AnalysisReport {
   }
 
   // Ustalenie progu krytycznego (np. 45 punktów)
-  const isDangerous = score >= 45;
+  const isDangerous = score >= 15;
 
   return {
     score,
